@@ -32,6 +32,7 @@ MODRINTH_API_VERSION_ENDPOINT: str = "https://api.modrinth.com/v2/version"
 MODRINTH_API_PROJECT_ENDPOINT: str = "https://api.modrinth.com/v2/project"
 MODRINTH_URL_BASE: str = f"https://modrinth.com"
 CONTENTS_INDEX_FILENAME: str = "contents-index.html"
+OUTPUT_DIRECTORY_SUFFIX: str = "_index"
 
 @dataclass
 class ModrinthFile:
@@ -193,7 +194,7 @@ def main() -> None:
     else:
         output_location = path.realpath(argv[2])
     # generate output directory path named based on input_file (without extention)
-    output_path: str = path.join(output_location, path.splitext(path.basename(input_file))[0])
+    output_path: str = path.join(output_location, f"{path.splitext(path.basename(input_file))[0]}{OUTPUT_DIRECTORY_SUFFIX}")
 
     index(input_file, output_path)
 
