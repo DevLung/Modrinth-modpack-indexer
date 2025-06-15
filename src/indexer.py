@@ -21,6 +21,7 @@ Arguments:
 """
 INVALID_INPUT_MSG: str = "Please supply a valid modrinth modpack file"
 OUTPUT_PATH_EXISTS_MSG: str = f"Output folder already exists. Use {FORCE_ARG} to overwrite it."
+CONNECTION_ERROR_MSG: str = f"Could not GET data from API"
 MODRINTH_INDEX_PATH: str = "./modrinth.index.json"
 OVERRIDE_DIR_PATH: str = "./overrides/"
 MRINDEX_NAME_KEY: str = "name"
@@ -67,16 +68,35 @@ def index(pack_file_path: str, output_path: str) -> None:
 
 def get_modrinth_project_info(mrindex_file_object: dict) -> ModrinthFile:
     download_url: str = mrindex_file_object["downloads"][0]
-    # extract version id from download url
+    # extract version id, project id from download url
     version_id: str = re.search(r"(?<=/versions/)[^/]+", download_url).group(0) # type: ignore
-    version_info: dict = requests.get(f"{MODRINTH_API_VERSION_ENDPOINT}/{version_id}").json()
-    project_id: str = version_info['project_id']
-    version_name: str = version_info["name"]
-    project_info: dict = requests.get(f"{MODRINTH_API_PROJECT_ENDPOINT}/{project_id}").json()
-    project_title: str = project_info["title"]
-    project_type: str = project_info["project_type"]
-    project_slug: str = project_info["slug"]
-    project_url: str = f"{MODRINTH_URL_BASE}/{project_type}/{project_slug}"
+    project_id: str = re.search(r"(?<=/data/)[^/]+", download_url).group(0) # type: ignore
+    
+    try:
+        version_info: dict = requests.get(f"{MODRINTH_API_VERSION_ENDPOINT}/{version_id}").json()
+        version_name: str = version_info["name"]
+    except (requests.exceptions.JSONDecodeError, requests.exceptions.ConnectionError) as ex:
+        if isinstance(ex, requests.exceptions.JSONDecodeError): # usually means the api returned an empty response
+            version_name: str = "null"
+        else:
+            print(f"{CONNECTION_ERROR_MSG} ({ex})")
+            exit(1)
+    
+    try:
+        project_info: dict = requests.get(f"{MODRINTH_API_PROJECT_ENDPOINT}/{project_id}").json()
+        project_title: str = project_info["title"]
+        project_type: str = project_info["project_type"]
+        project_slug: str = project_info["slug"]
+        project_url: str = f"{MODRINTH_URL_BASE}/{project_type}/{project_slug}"
+    except (requests.exceptions.JSONDecodeError, requests.exceptions.ConnectionError) as ex:
+        if isinstance(ex, requests.exceptions.JSONDecodeError): # usually means the api returned an empty response
+            project_title: str = f"{re.search(r'[^/]+$', download_url).group(0)} (unknown project)" # type: ignore
+            # retrieve project type from file's target directory name by removing the "s" at the end
+            project_type: str = re.search(r"^[^/]+", mrindex_file_object["path"]).group(0)[:-1] # type: ignore
+            project_url: str = "about:blank"
+        else:
+            print(f"{CONNECTION_ERROR_MSG} ({ex})")
+            exit(1)
     
     return ModrinthFile(project_title, project_url, project_type, version_name, download_url)
 
