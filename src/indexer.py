@@ -178,7 +178,7 @@ def create_html_content_index(name: str, version: str, summary: str, dependencie
 </html>
 """
 
-    with open(path.join(output_path, CONTENTS_INDEX_FILENAME), "w") as file:
+    with open(path.join(output_path, CONTENTS_INDEX_FILENAME), "w", encoding="utf-8") as file:
         file.write(html)
 
 
@@ -198,7 +198,7 @@ def process_index(index: dict, output_path: str) -> None:
     for item in index[MRINDEX_FILES_KEY]:
         request_counter += 1
         print(f"retrieving project info... [{request_counter}/{len(index[MRINDEX_FILES_KEY])}]")
-        
+
         item_data: ModrinthFile = get_modrinth_project_info(item)
         pack_contents[item_data.project_type].append(item_data)
 
