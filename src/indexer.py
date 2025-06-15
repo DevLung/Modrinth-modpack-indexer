@@ -1,5 +1,5 @@
 from sys import argv, exit
-from os import path, makedirs, remove, pardir
+from os import path, makedirs, remove
 from shutil import rmtree
 from zipfile import ZipFile
 from dataclasses import dataclass
@@ -58,6 +58,7 @@ def index(pack_file_path: str, output_path: str) -> None:
 
     with open(path.join(output_path, MODRINTH_INDEX_PATH), "r") as modrinth_index_file:
         modrinth_index: dict = json.load(modrinth_index_file)
+    remove(path.join(output_path, MODRINTH_INDEX_PATH))
 
     process_index(modrinth_index, output_path)
 
