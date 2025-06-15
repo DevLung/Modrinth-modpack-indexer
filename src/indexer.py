@@ -1,9 +1,12 @@
 from sys import argv, exit
-from os import path, makedirs, remove
+from os import path, makedirs, remove, pardir
 from shutil import rmtree
 from zipfile import ZipFile
+from dataclasses import dataclass
+import re
 import requests
 import json
+
 
 
 
@@ -19,6 +22,24 @@ Arguments:
 INVALID_INPUT_MSG: str = "Please supply a valid modrinth modpack file"
 OUTPUT_PATH_EXISTS_MSG: str = f"Output folder already exists. Use {FORCE_ARG} to overwrite it."
 MODRINTH_INDEX_PATH: str = "./modrinth.index.json"
+OVERRIDE_DIR_PATH: str = "./overrides/"
+MRINDEX_NAME_KEY: str = "name"
+MRINDEX_VERSION_KEY: str = "versionId"
+MRINDEX_SUMMARY_KEY: str = "summary"
+MRINDEX_FILES_KEY: str = "files"
+MRINDEX_DEPENDENCIES_KEY: str = "dependencies"
+MODRINTH_API_VERSION_ENDPOINT: str = "https://api.modrinth.com/v2/version"
+MODRINTH_API_PROJECT_ENDPOINT: str = "https://api.modrinth.com/v2/project"
+MODRINTH_URL_BASE: str = f"https://modrinth.com"
+CONTENTS_INDEX_FILENAME: str = "contents-index.html"
+
+@dataclass
+class ModrinthFile:
+    project_name: str
+    project_url: str
+    project_type: str
+    version: str
+    version_download_url: str
 
 
 
@@ -38,12 +59,120 @@ def index(pack_file_path: str, output_path: str) -> None:
     with open(path.join(output_path, MODRINTH_INDEX_PATH), "r") as modrinth_index_file:
         modrinth_index: dict = json.load(modrinth_index_file)
 
-    process_index(modrinth_index)
+    process_index(modrinth_index, output_path)
 
 
 
-def process_index(index: dict) -> None:
-    pass
+def get_modrinth_project_info(mrindex_file_object: dict) -> ModrinthFile:
+    download_url: str = mrindex_file_object["downloads"][0]
+    # extract version id from download url
+    version_id: str = re.search(r"(?<=/versions/)[^/]+", download_url).group(0) # type: ignore
+    version_info: dict = requests.get(f"{MODRINTH_API_VERSION_ENDPOINT}/{version_id}").json()
+    project_id: str = version_info['project_id']
+    version_name: str = version_info["name"]
+    project_info: dict = requests.get(f"{MODRINTH_API_PROJECT_ENDPOINT}/{project_id}").json()
+    project_title: str = project_info["title"]
+    project_type: str = project_info["project_type"]
+    project_slug: str = project_info["slug"]
+    project_url: str = f"{MODRINTH_URL_BASE}/{project_type}/{project_slug}"
+    
+    return ModrinthFile(project_title, project_url, project_type, version_name, download_url)
+
+
+
+def create_project_file_tr(file: ModrinthFile) -> str:
+    tr: str = "\n                " # indentation
+    tr += f"<tr><td style='padding-right: 1rem;'><a href='{file.project_url}' target='_blank' rel='noreferrer noopener'>{file.project_name}</a></td>"
+    tr += f"<td><a href='{file.version_download_url}' target='_blank' rel='noreferrer noopener'>{file.version}</a></td></tr>"
+    return tr
+
+
+
+def create_html_content_index(name: str, version: str, summary: str, dependencies: dict[str, str], contents: dict[str, list[ModrinthFile]], output_path: str) -> None:
+    html: str = f"""<!DOCTYPE html>
+<html lang='en'>
+
+<head>
+    <meta charset='utf-8'>
+    <title>{name}: Contents Index</title>
+</head>
+
+<body style='font-family: monospace, sans-serif;'>
+    <h1>Contents Index</h1>
+    
+    <div>
+        <h2><i>Modpack Name:</i> {name}</h2>
+        <table style='text-align: left; margin-bottom: 2.5rem'>
+            <tr>
+                <th style='padding-right: 2rem'><i>Version</i></th>
+                <th style='padding-right: 3rem'><i>Summary</i></th>
+                <th><i>Dependencies</i></th>
+            </tr>
+            <tr>
+                <td style='padding-right: 2rem; vertical-align: top;'>{version}</td>
+                <td style='padding-right: 3rem; vertical-align: top;'>{summary}</td>
+                <td style='vertical-align: top;'>
+                    <ul style='padding: 0; margin: 0;'>"""
+    
+    for dependency, dependency_version in dependencies.items():
+        html += f"\n                        <li>{dependency} {dependency_version}</li>"
+    
+    html += """
+                    </ul>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <div>"""
+
+    for type_name, content_type in contents.items():
+        if content_type != []:
+            html += f"""
+        <p>
+            <h3 id='{type_name}s'>{type_name.capitalize()}s</h3>
+            <table style='text-align: left; margin-bottom: 3rem'>
+                <tr><th><i>Project</i></th><th><i>Version</i></th></tr>"""
+            for file in content_type:
+                html += create_project_file_tr(file)
+            html += """            </table>
+        </p>"""
+    
+    if path.exists(path.join(output_path, OVERRIDE_DIR_PATH)):
+        html += f"""
+        <p>
+            <h3 id='overrides'>Overrides</h3>
+            Files manually added to the pack are located <a href='{OVERRIDE_DIR_PATH}' target='_blank' rel='noreferrer noopener'>here</a>
+        </p>"""
+
+    html += """
+    </div>
+</body>
+
+</html>
+"""
+
+    with open(path.join(output_path, CONTENTS_INDEX_FILENAME), "w") as file:
+        file.write(html)
+
+
+
+def process_index(index: dict, output_path: str) -> None:
+    pack_name: str = index[MRINDEX_NAME_KEY]
+    pack_version: str = index[MRINDEX_VERSION_KEY]
+    pack_summary: str = index[MRINDEX_SUMMARY_KEY]
+    pack_dependencies: dict[str, str] = index[MRINDEX_DEPENDENCIES_KEY]
+    pack_contents: dict[str, list[ModrinthFile]] = {
+        "mod": [],
+        "datapack": [],
+        "resourcepack": [],
+        "shader": []
+    }
+    for item in index[MRINDEX_FILES_KEY]:
+        item_data: ModrinthFile = get_modrinth_project_info(item)
+        pack_contents[item_data.project_type].append(item_data)
+
+    create_html_content_index(pack_name, pack_version, pack_summary, pack_dependencies, pack_contents, output_path)
 
 
 
@@ -58,7 +187,7 @@ def main() -> None:
 
     input_file: str = path.realpath(argv[1])
     output_location: str = ""
-    if len(argv) < 3 or not path.exists(argv[2]):
+    if len(argv) < 3 or argv[2] == FORCE_ARG:
         output_location = path.dirname(input_file)
     else:
         output_location = path.realpath(argv[2])
