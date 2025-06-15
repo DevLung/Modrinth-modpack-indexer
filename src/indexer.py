@@ -22,6 +22,7 @@ Arguments:
 INVALID_INPUT_MSG: str = "Please supply a valid modrinth modpack file"
 OUTPUT_PATH_EXISTS_MSG: str = f"Output folder already exists. Use {FORCE_ARG} to overwrite it."
 CONNECTION_ERROR_MSG: str = f"Could not GET data from API"
+NO_PROJECT_URL_PLACEHOLDER: str = "about:blank"
 MODRINTH_INDEX_PATH: str = "./modrinth.index.json"
 OVERRIDE_DIR_PATH: str = "./overrides/"
 MRINDEX_NAME_KEY: str = "name"
@@ -93,7 +94,7 @@ def get_modrinth_project_info(mrindex_file_object: dict) -> ModrinthFile:
             project_title: str = f"{re.search(r'[^/]+$', download_url).group(0)} (unknown project)" # type: ignore
             # retrieve project type from file's target directory name by removing the "s" at the end
             project_type: str = re.search(r"^[^/]+", mrindex_file_object["path"]).group(0)[:-1] # type: ignore
-            project_url: str = "about:blank"
+            project_url: str = NO_PROJECT_URL_PLACEHOLDER
         else:
             print(f"{CONNECTION_ERROR_MSG} ({ex})")
             exit(1)

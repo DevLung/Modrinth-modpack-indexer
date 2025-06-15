@@ -1,6 +1,6 @@
 # Modrinth Modpack Indexer
 
-A tool to easily index and extract all contents of a Modrinth modpack from its .mrpack file.
+A tool that uses the Modrinth API to index and extract all contents of a Modrinth modpack from its .mrpack file.
 
 ## Usage:
 ```
