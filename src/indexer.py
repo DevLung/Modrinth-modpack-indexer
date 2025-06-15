@@ -1,5 +1,5 @@
 from sys import argv, exit
-from os import path, makedirs, remove
+from os import path, makedirs, remove, startfile
 from shutil import rmtree
 from zipfile import ZipFile
 from dataclasses import dataclass
@@ -56,9 +56,12 @@ def index(pack_file_path: str, output_path: str) -> None:
     
     makedirs(output_path)
 
+    print("extracting overrides...")
+    
     with ZipFile(pack_file_path, "r") as pack_file:
         pack_file.extractall(output_path)
 
+    print("reading modrinth index...")
     with open(path.join(output_path, MODRINTH_INDEX_PATH), "r") as modrinth_index_file:
         modrinth_index: dict = json.load(modrinth_index_file)
     remove(path.join(output_path, MODRINTH_INDEX_PATH))
@@ -191,10 +194,15 @@ def process_index(index: dict, output_path: str) -> None:
         "resourcepack": [],
         "shader": []
     }
+    request_counter: int = 0
     for item in index[MRINDEX_FILES_KEY]:
+        request_counter += 1
+        print(f"retrieving project info... [{request_counter}/{len(index[MRINDEX_FILES_KEY])}]")
+        
         item_data: ModrinthFile = get_modrinth_project_info(item)
         pack_contents[item_data.project_type].append(item_data)
 
+    print("creating contents index...")
     create_html_content_index(pack_name, pack_version, pack_summary, pack_dependencies, pack_contents, output_path)
 
 
@@ -217,7 +225,10 @@ def main() -> None:
     # generate output directory path named based on input_file (without extention)
     output_path: str = path.join(output_location, f"{path.splitext(path.basename(input_file))[0]}{OUTPUT_DIRECTORY_SUFFIX}")
 
+    print(f"starting to index '{input_file}', output will be saved at '{output_path}'...")
     index(input_file, output_path)
+    print(f"Done! Output saved at '{output_path}'")
+    startfile(output_path)
 
 
 
